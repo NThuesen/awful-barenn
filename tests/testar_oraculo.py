@@ -10,6 +10,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "27f88c44a9d2cdcf3494af4d0ce87f8f285f08da"
+# Oráculo anterior às otimizações, com a matemática do legado.
+REFERENCIA = "172a8e5a40ead4c6d4767bb895a1cab5e3d029f6"
 
 
 def rodar(cmd, **kwargs):
@@ -30,16 +32,21 @@ def main():
         temp = Path(td)
         fonte = temp / "base.cpp"
         fonte.write_text(rodar(["git", "show", f"{BASE}:barenn.cpp"]).stdout)
+        referencia = temp / "referencia.cpp"
+        referencia.write_text(rodar(["git", "show", f"{REFERENCIA}:barenn.cpp"]).stdout)
         flags = ["g++", "-std=c++17", "-O3", "-g"]
         for origem, nome, extra in ((fonte, "base", []), (ROOT / "barenn.cpp", "normal", []),
                                     (ROOT / "barenn.cpp", "oraculo", ["-DBARENN_ORACLE"]),
-                                    (ROOT / "tests/oraculo.cpp", "unitario", [])):
+                                    (ROOT / "tests/oraculo.cpp", "unitario", []),
+                                    (referencia, "referencia", ["-DBARENN_ORACLE"])):
             rodar(flags + extra + [str(origem), "-o", str(temp / nome)])
         print(rodar([str(temp / "unitario")]).stdout.strip())
-        pre_base = rodar(["g++", "-std=c++17", "-E", "-P", str(fonte)]).stdout
-        pre_novo = rodar(["g++", "-std=c++17", "-E", "-P", "barenn.cpp"]).stdout
-        assert pre_base == pre_novo, "build normal alterado pelo pré-processamento"
-        print("Pré-processamento sem macro idêntico ao legado.")
+        pre_normal = rodar(["g++", "-std=c++17", "-E", "-P", "barenn.cpp"]).stdout
+        pre_oraculo = rodar(["g++", "-std=c++17", "-DBARENN_ORACLE", "-E", "-P", "barenn.cpp"]).stdout
+        for marcador in ("namespace Oracle", "Oracle::", "BARENN_ORACLE_OUTPUT"):
+            assert marcador not in pre_normal, f"captura presente no build normal: {marcador}"
+            assert marcador in pre_oraculo, f"captura ausente no build de diagnóstico: {marcador}"
+        print("Código de captura presente apenas na compilação com macro.")
         env = os.environ.copy()
         env.pop("BARENN_ORACLE_OUTPUT", None)
         saidas = []
@@ -50,6 +57,12 @@ def main():
                 saidas.append(saida_sem_tempo(proc.stdout))
         assert all(x == saidas[0] for x in saidas)
         print("Cinco execuções de cada build sem captura: saídas iguais.")
+        # Mesmo com a variável definida, o binário normal não deve capturar.
+        ignorado = temp / "nao-deve-existir.tsv"
+        proc = rodar([str(temp / "normal")], env={**env, "BARENN_ORACLE_OUTPUT": str(ignorado)})
+        assert not proc.stderr and saida_sem_tempo(proc.stdout) == saidas[0]
+        assert not ignorado.exists(), "build sem macro criou captura"
+        print("Build normal ignora a variável de captura e preserva a saída.")
         rastros = []
         for i in range(2):
             rastro = temp / f"rastro{i}.tsv"
@@ -60,6 +73,12 @@ def main():
         print("Duas capturas completas idênticas e saída igual ao legado.")
         comp = [sys.executable, "scripts/validar_oraculo.py", str(rastros[0]), str(rastros[1]), "--atol", "0", "--rtol", "0"]
         print(rodar(comp).stdout.strip())
+        rastro_ref = temp / "referencia.tsv"
+        proc = rodar([str(temp / "referencia")], env={**env, "BARENN_ORACLE_OUTPUT": str(rastro_ref)})
+        assert not proc.stderr and saida_sem_tempo(proc.stdout) == saidas[0]
+        print("Comparação com referência anterior às otimizações (tolerâncias zero):")
+        print(rodar([sys.executable, "scripts/validar_oraculo.py", str(rastro_ref),
+                     str(rastros[0]), "--atol", "0", "--rtol", "0"]).stdout.strip())
         original = rastros[0].read_text()
         dados = dict(line.split("\t") for line in original.splitlines()[1:])
         for chave, texto in dados.items():

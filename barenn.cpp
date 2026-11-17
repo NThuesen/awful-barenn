@@ -155,12 +155,10 @@ public:
 
         // O gradiente da entrada usa os pesos anteriores à atualização.
         vector<float> grad_in(in_features);
-        for (int i = 0; i < in_features; ++i) {
-            float sum = 0;
-            for (int j = 0; j < out_features; ++j) {
-                sum += delta[j] * weights[j][i];
+        for (int j = 0; j < out_features; ++j) {
+            for (int i = 0; i < in_features; ++i) {
+                grad_in[i] += delta[j] * weights[j][i];
             }
-            grad_in[i] = sum;
         }
 
 #ifdef BARENN_ORACLE
