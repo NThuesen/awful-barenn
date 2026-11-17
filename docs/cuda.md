@@ -80,4 +80,25 @@ Em um perfil curto anterior com Nsight Systems (128 amostras), passar de sete ke
 
 Com `--fmad=false`, a versão integrada reproduziu os **83.672 valores** do oráculo, as **51 perdas por época**, a matriz de confusão e **1.717 acertos em 1.797 testes**. O FMA ativo permanece fora da configuração validada. O teste curto com Compute Sanitizer não encontrou problemas reportados de memória, barreiras ou corridas; não foi testada uma falha real de alocação CUDA.
 
-**Pendente para concluir a Issue #7:** ela prevê cinco execuções não instrumentadas; os resultados desta etapa foram registrados com três. Também é necessário revisar o PR antes de fazer merge. A documentação preserva esses resultados como preliminares, sem inventar medições adicionais.
+## Validação experimental final
+
+Foi feita uma rodada de cinco execuções de treino CPU e cinco CUDA, sem profiler e sem captura do oráculo, com 3.823 amostras na ordem do arquivo, 51 épocas e 1.797 imagens de teste. A CPU usou `g++ 14.2.0 -O3 -ffp-contract=off`; a GPU usou CUDA 12.8.93 e `nvcc -O3 --fmad=false`. Cada versão teve um aquecimento completo em processo separado, descartado das medições. Os cinco pares foram intercalados em jobs Slurm separados, com uma CPU por job e uma GPU para cada job CUDA. Cada processo reinicializou os pesos; o aquecimento não preserva o contexto CUDA entre processos.
+
+Os tempos de **treinamento** foram:
+
+| Execução | CPU (s) | CUDA (s) |
+| ---: | ---: | ---: |
+| 1 | 0,2696 | 1,670263 |
+| 2 | 0,2693 | 1,670837 |
+| 3 | 0,2687 | 1,670818 |
+| 4 | 0,2687 | 1,671449 |
+| 5 | 0,2683 | 1,671034 |
+| **Mediana** | **0,2687** | **1,670837** |
+| **Mínimo** | **0,2683** | **1,670263** |
+| **Máximo** | **0,2696** | **1,671449** |
+
+Nesta rodada, a GPU levou cerca de **6,22 vezes** o tempo da CPU para treinar esta rede pequena. As máquinas não eram idênticas: CPU em `merry_cpu`, nó compute10 com Intel Core i7-13700T; CUDA em `merry_gpu`, nó compute20 com Intel Core i9-14900 e NVIDIA RTX A1000. Não se deve atribuir toda a diferença somente à GPU. O tempo CPU é impresso com quatro casas decimais. Não se comparam aqui avaliação ou tempo total, pois os escopos de medição das duas versões não são equivalentes.
+
+Para conferir todas as perdas e a matriz, foi usada uma cópia temporária da CPU que apenas imprime as 51 perdas após o cronômetro de treino e a matriz durante a avaliação; a matemática e o laço medido não foram alterados. Em todas as dez execuções, as 51 perdas e as 100 células da matriz coincidiram com a referência capturada anteriormente, e houve **1.717 acertos em 1.797**. A validação completa anterior, com 83.672 valores idênticos e FMA desativado, permanece válida para o mesmo código CUDA. A captura de diagnóstico e o profiler não participaram desta rodada de tempos.
+
+A aula de CUDA fundamenta as cópias explícitas e a manutenção dos dados na GPU; a de memória compartilhada e sincronização fundamenta a reutilização dos pesos e as barreiras dentro do bloco. O estudo de caso mostra a redução dos lançamentos por época e orienta usar profiling para investigar custos, medindo desempenho sem profiler. A rede e a ordem fixa do SGD desta APS foram preservadas. O FMA ativo continua experimental, e a duplicação do suporte CPU/CUDA permanece para avaliação separada.
