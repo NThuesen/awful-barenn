@@ -1,8 +1,12 @@
 # Treinamento CUDA
 
-A versão CUDA usa um bloco por época. O bloco percorre as amostras na ordem do arquivo e mantém pesos em memória compartilhada. Barreiras separam as camadas e as etapas do backward; o gradiente de entrada usa os pesos anteriores à atualização. Após cada época, as perdas por amostra são copiadas para o host e somadas em `double`, na mesma ordem da CPU. Essa organização segue os conceitos de memória compartilhada, sincronização e redução de lançamentos da aula de Estudo de Caso e Profiling em GPU.
+O objetivo desta etapa foi levar o treinamento do Barenn para a GPU sem mudar a maneira como a rede aprende. Continuamos com 51 épocas, as amostras na ordem do arquivo e uma atualização dos pesos depois de cada amostra. Não usamos embaralhamento nem mini-batches, porque isso mudaria o resultado que estamos tentando preservar.
 
-O script compila com `--fmad=false`, configuração usada na comparação numérica com a CPU. **FMA ativo permanece experimental e suas diferenças ainda não foram aprovadas**: no experimento anterior, oito previsões diferiram da CPU. Não se deve assumir que os resultados com FMA ativo são equivalentes. A captura do oráculo é opcional e não deve ser usada para medir desempenho.
+A versão integrada executa **um kernel por época**. Dentro dele, um bloco CUDA percorre as amostras e divide os cálculos dos neurônios entre as threads. Os pesos ficam em memória compartilhada, e as barreiras evitam que uma etapa leia valores que ainda estão sendo alterados. No backward, o gradiente de entrada usa os pesos anteriores à atualização. Ao terminar a época, a GPU envia as perdas por amostra para a CPU, que faz a soma em `double` na mesma ordem da versão original.
+
+**O que encontramos:** o programa acertou as mesmas **1.717 de 1.797** imagens e reproduziu as 51 perdas e a matriz de confusão. A comparação completa também encontrou **83.672 valores iguais** ao oráculo. A troca de um kernel por amostra para um por época diminuiu o tempo da própria versão CUDA, mas, neste problema pequeno, **a CPU continuou mais rápida**: mediana de 0,2687 s contra 1,670837 s na GPU. As medições e a diferença entre os nós usados estão documentadas abaixo.
+
+Para comparar os resultados numéricos, usamos `--fmad=false` na compilação CUDA. Com FMA ativo, oito previsões diferiram da CPU no teste anterior; essa configuração continua fora do escopo validado. A captura do oráculo é opcional e não entra nos benchmarks.
 
 ## Compilação e execução no Franky
 
