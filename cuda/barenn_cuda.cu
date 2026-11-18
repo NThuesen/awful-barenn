@@ -73,10 +73,12 @@ __device__ void fused_backward(Layer l, const float* input, const float* gout, b
         l.grad_in[i]=sum;
     }
     __syncthreads(); // grad_in inteiro calculado com pesos antigos.
-    if (i<l.out) {
-        for(int j=0;j<l.in;++j) l.w[i*l.in+j]-=0.02f*(l.delta[i]*input[j]);
-        l.b[i]-=0.02f*l.delta[i];
+    for (int k=i; k<l.out*l.in; k+=blockDim.x) {
+        int neuron=k/l.in;
+        int feature=k%l.in;
+        l.w[k]-=0.02f*(l.delta[neuron]*input[feature]);
     }
+    if (i<l.out) l.b[i]-=0.02f*l.delta[i];
     __syncthreads(); // atualização concluída antes de avançar de camada.
 }
 // Captura somente diagnóstica das duas primeiras amostras selecionadas.
