@@ -39,12 +39,12 @@ Na raiz da versão final CPU (C++17 e OpenMP disponíveis):
 ```bash
 git checkout v0.5-cpu-openmp-datasets
 g++ -std=c++17 -O3 -g -ffp-contract=off -fopenmp barenn.cpp -o barenn_cpu
-OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE OMP_PLACES=cores OMP_PROC_BIND=close OMP_WAIT_POLICY=PASSIVE ./barenn_cpu
+OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE ./barenn_cpu
 python3 tests/testar_oraculo.py
 python3 tests/testar_leitura_openmp.py
 ```
 
-A opção `-fopenmp` habilita a conversão paralela; sem ela, o mesmo código pode rodar sequencialmente. Quatro threads foram a configuração mais estável entre as testadas; não é uma recomendação universal. Os testes requerem Python 3 e um compilador compatível. A suíte do oráculo utiliza commits históricos, portanto execute em clone com o histórico disponível.
+A opção `-fopenmp` habilita a conversão paralela; sem ela, o mesmo código pode rodar sequencialmente. Quatro threads foram a configuração mais estável entre as testadas no Franky; não é uma recomendação universal. Nos benchmarks, a afinidade das threads também foi configurada (`OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_WAIT_POLICY=PASSIVE`); em computadores diferentes, essas opções devem ser adequadas à topologia disponível. Os testes requerem Python 3 e um compilador compatível. A suíte do oráculo utiliza commits históricos, portanto execute em clone com o histórico disponível.
 
 Para reproduzir o marco CUDA no Franky, use a versão apropriada, o módulo CUDA do cluster e as instruções de [compilação e validação](docs/cuda.md):
 
