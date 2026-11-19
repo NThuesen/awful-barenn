@@ -1,3 +1,88 @@
+# Barenn — APS2 de SuperComputação
+
+Este repositório reúne as otimizações de uma rede neural *feedforward* em C++ e sua implementação CUDA. O objetivo foi melhorar o desempenho sem mudar a matemática: mantivemos as 51 épocas, a ordem das amostras e as atualizações SGD uma a uma.
+
+O resultado não foi simplesmente “GPU mais rápida”. A CPU melhorou em etapas, uma mudança de OpenMP ficou mais lenta e foi descartada, e a versão CUDA ganhou desempenho em relação à sua própria implementação anterior — embora ainda tenha perdido para a CPU nesta carga pequena. Abaixo estão os números e o caminho para reproduzir cada conclusão.
+
+## Resultados em uma página
+
+| Versão | Tag do código | Treino (mediana) | Onde foi medido |
+| --- | --- | ---: | --- |
+| Baseline legado | [v0.0-cpu-baseline](https://github.com/NThuesen/awful-barenn/tree/v0.0-cpu-baseline) | **0,3622 s** | CPU, `compute10`, [#2](https://github.com/NThuesen/awful-barenn/issues/2) |
+| CPU otimizada (estado final) | [v0.5-cpu-openmp-datasets](https://github.com/NThuesen/awful-barenn/tree/v0.5-cpu-openmp-datasets) | **aprox. 0,255–0,256 s** | CPU, `compute10`; treino sem mudança material no experimento [#18](https://github.com/NThuesen/awful-barenn/issues/18) |
+| CUDA inicial funcional | [v0.2-cuda-funcional](https://github.com/NThuesen/awful-barenn/tree/v0.2-cuda-funcional) | **1,676300 s** | RTX A1000, `compute20`, rodada [#10](https://github.com/NThuesen/awful-barenn/issues/10) |
+| CUDA otimizada | [v0.3-cuda-backward-paralelo](https://github.com/NThuesen/awful-barenn/tree/v0.3-cuda-backward-paralelo) | **0,926385 s** | RTX A1000, `compute20`, mesma rodada [#10](https://github.com/NThuesen/awful-barenn/issues/10) |
+
+Esses tempos são do **treinamento**, medidos sem profiler. Eles vêm de rodadas diferentes, exceto o par CUDA da #10. A versão CPU final também otimiza a **carga dos dados**, cujo ganho aparece no tempo do processo completo; misturar essa métrica com tempo de treino seria incorreto. Não calculamos um único speedup “CPU final versus baseline” a partir de rodadas diferentes.
+
+| Mudança testada | Comparação feita na mesma rodada | Resultado |
+| --- | --- | --- |
+| Localidade no backward da CPU ([#5](https://github.com/NThuesen/awful-barenn/issues/5)) | 0,3618 → 0,2691 s de **treino** | **1,34×** |
+| Evitar cópias no `Backward` ([#4](https://github.com/NThuesen/awful-barenn/issues/4)) | 0,2703 → 0,2561 s; segunda rodada 0,2698 → 0,2562 s de **treino** | **1,055× / 1,053×** |
+| Conversão OpenMP de datasets, quatro threads ([#18](https://github.com/NThuesen/awful-barenn/issues/18)) | 0,313063 → 0,298183 s; segunda rodada 0,310348 → 0,294662 s de **processo completo** | **1,050× / 1,053×** |
+| Paralelismo de pesos no backward CUDA ([#10](https://github.com/NThuesen/awful-barenn/issues/10)) | 1,676300 → 0,926385 s de **treino** | **1,81×** |
+
+Cada comparação acima tem cinco medições independentes por configuração, com detalhes de dispersão, aquecimento, hardware e flags na respectiva Issue. Os ganhos não devem ser multiplicados como se tivessem sido obtidos num único benchmark. A tentativa de OpenMP dentro do `Forward` ([#6](https://github.com/NThuesen/awful-barenn/issues/6)) preservou os resultados, mas piorou o desempenho; ficou fora da versão final. A ideia de reduzir cópias CUDA ([#9](https://github.com/NThuesen/awful-barenn/issues/9)) também não foi implementada, porque o profiling disponível não sustentou sua prioridade.
+
+## Corretude e limites da comparação
+
+Usamos os arquivos originais `optdigits.tra` (3.823 amostras) e `optdigits.tes` (1.797 testes), com a rede **64 → 32 → 16 → 10**, 51 épocas e SGD na ordem do arquivo. Nas configurações validadas, **83.672 valores** coincidiram com o oráculo numérico, com `atol=0` e `rtol=0`; as execuções reproduziram **1.717 acertos em 1.797 testes**, as 51 perdas e a matriz de confusão.
+
+Para preservar essa igualdade, as medições de referência CPU usaram `-ffp-contract=off` e a CUDA `--fmad=false`. Não estendemos a afirmação de igualdade exata a outras flags ou à CUDA com FMA ativo. As medidas CPU ocorreram no `compute10` (Intel i7-13700T), e as CUDA no `compute20` (Intel i9-14900 + RTX A1000): a diferença entre nós impede atribuir toda a comparação CPU/GPU apenas ao tipo de processador.
+
+O [profiling de CPU](https://github.com/NThuesen/awful-barenn/issues/2) identificou o custo do gradiente de entrada no backward. No [profiling CUDA](https://github.com/NThuesen/awful-barenn/issues/8), o kernel de treino concentrou 99,37% do tempo acumulado de kernels; o Nsight Compute não forneceu contadores por restrição de permissão (`ERR_NVGPUCTRPERM`). Portanto, não afirmamos ter medido ocupação real dos SMs ou o custo isolado das barreiras.
+
+## Como executar e verificar
+
+Na raiz da versão final CPU (C++17 e OpenMP disponíveis):
+
+```bash
+git checkout v0.5-cpu-openmp-datasets
+g++ -std=c++17 -O3 -g -ffp-contract=off -fopenmp barenn.cpp -o barenn_cpu
+OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE ./barenn_cpu
+python3 tests/testar_oraculo.py
+python3 tests/testar_leitura_openmp.py
+```
+
+A opção `-fopenmp` habilita a conversão paralela; sem ela, o mesmo código pode rodar sequencialmente. Quatro threads foram a configuração mais estável entre as testadas no Franky; não é uma recomendação universal. Nos benchmarks, a afinidade das threads também foi configurada (`OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_WAIT_POLICY=PASSIVE`); em computadores diferentes, essas opções devem ser adequadas à topologia disponível. Os testes requerem Python 3 e um compilador compatível. A suíte do oráculo utiliza commits históricos, portanto execute em clone com o histórico disponível.
+
+Para reproduzir o marco CUDA no Franky, faça o checkout no nó de acesso e prepare os cabeçalhos quando necessário, conforme as instruções de [compilação e validação](docs/cuda.md). Em seguida, solicite uma GPU e execute os comandos no nó alocado:
+
+```bash
+git checkout v0.3-cuda-backward-paralelo
+srun --partition=merry_gpu --gres=gpu:1 --cpus-per-task=1 --mem=2048M --time=00:04:30 --pty bash
+module load gcc/14.2.0
+module load cuda/12.8.1
+scripts/compilar_cuda.sh ./barenn_cuda
+./barenn_cuda
+```
+
+Os comandos completos de Slurm, o procedimento quando faltam cabeçalhos e o uso do [oráculo numérico](docs/oraculo-numerico.md) estão nesses documentos. Os tempos apresentados acima são resultados coletados **no Franky**, não benchmarks executados no computador pessoal.
+
+## Índice dos experimentos
+
+| Etapa | Evidências e discussão | Integração / marco |
+| --- | --- | --- |
+| Planejamento | [#1 — roadmap](https://github.com/NThuesen/awful-barenn/issues/1) | Acompanhamento; sem tag própria |
+| Baseline e profiling CPU | [#2](https://github.com/NThuesen/awful-barenn/issues/2) | [v0.0-cpu-baseline](https://github.com/NThuesen/awful-barenn/tree/v0.0-cpu-baseline) |
+| Oráculo de corretude | [#3](https://github.com/NThuesen/awful-barenn/issues/3) | [PR #13](https://github.com/NThuesen/awful-barenn/pull/13) · [v0.0-oraculo-numerico](https://github.com/NThuesen/awful-barenn/tree/v0.0-oraculo-numerico) |
+| Localidade da CPU | [#5](https://github.com/NThuesen/awful-barenn/issues/5) | [PR #14](https://github.com/NThuesen/awful-barenn/pull/14) · [v0.1-cpu-localidade](https://github.com/NThuesen/awful-barenn/tree/v0.1-cpu-localidade) |
+| Migração CUDA | [#7](https://github.com/NThuesen/awful-barenn/issues/7) | [PR #15](https://github.com/NThuesen/awful-barenn/pull/15) · [v0.2-cuda-funcional](https://github.com/NThuesen/awful-barenn/tree/v0.2-cuda-funcional) |
+| Profiling GPU | [#8](https://github.com/NThuesen/awful-barenn/issues/8) | Diagnóstico sem mudança de código |
+| Paralelismo CUDA | [#10](https://github.com/NThuesen/awful-barenn/issues/10) | [PR #16](https://github.com/NThuesen/awful-barenn/pull/16) · [v0.3-cuda-backward-paralelo](https://github.com/NThuesen/awful-barenn/tree/v0.3-cuda-backward-paralelo) |
+| Redução de cópias CPU | [#4](https://github.com/NThuesen/awful-barenn/issues/4) | [PR #17](https://github.com/NThuesen/awful-barenn/pull/17) · [v0.4-cpu-backward-const-ref](https://github.com/NThuesen/awful-barenn/tree/v0.4-cpu-backward-const-ref) |
+| OpenMP dentro do Forward | [#6](https://github.com/NThuesen/awful-barenn/issues/6) | Experimento descartado; sem PR/tag |
+| Carga OpenMP dos datasets | [#18](https://github.com/NThuesen/awful-barenn/issues/18) | [PR #19](https://github.com/NThuesen/awful-barenn/pull/19) · [v0.5-cpu-openmp-datasets](https://github.com/NThuesen/awful-barenn/tree/v0.5-cpu-openmp-datasets) |
+| Transferências CUDA | [#9](https://github.com/NThuesen/awful-barenn/issues/9) | Hipótese não implementada; sem PR/tag |
+| Comparação histórica | [#11](https://github.com/NThuesen/awful-barenn/issues/11) | Relatório; sem tag própria |
+| Conferência de entrega | [#12](https://github.com/NThuesen/awful-barenn/issues/12) | Checklist e auditoria final |
+
+As **sete tags** publicadas são anotadas e apontam para os commits registrados em cada marco. A fork utiliza `master` como branch padrão; o enunciado abaixo usa `main`, mas os PRs deste trabalho foram integrados à `master`.
+
+---
+
+## Enunciado da atividade (mantido abaixo para consulta)
+
 # Projeto Barenn: O Legado, a Sobrevivência e o Salto para a GPU
 
 Era uma segunda-feira aparentemente tranquila quando a demanda chegou à sua mesa. A liderança técnica se aproximou com um sorriso contido e soltou aquela frase clássica que faz qualquer engenheiro gelar por dentro:
