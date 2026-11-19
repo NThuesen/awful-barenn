@@ -2,6 +2,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -203,33 +204,46 @@ vector<Amostra> ler_dados(const string& caminho) {
         throw runtime_error("Não foi possível abrir " + caminho);
     }
 
-    vector<Amostra> dados;
+    vector<string> linhas;
     string linha;
-    size_t numero_linha = 0;
     while (getline(arquivo, linha)) {
-        ++numero_linha;
-        istringstream campos(linha);
-        Amostra amostra{};
-        // Cada atributo deve ser seguido por vírgula, inclusive o último.
-        for (int i = 0; i < entradas; ++i) {
-            float valor;
-            char separador;
-            if (!(campos >> valor >> separador) || separador != ',' ||
-                !isfinite(valor) || valor < 0 || valor > 16) {
-                break;
+        linhas.push_back(move(linha));
+    }
+
+    vector<Amostra> dados(linhas.size());
+    vector<exception_ptr> erros(linhas.size());
+    #pragma omp parallel for schedule(static)
+    for (size_t indice = 0; indice < linhas.size(); ++indice) {
+        try {
+            istringstream campos(linhas[indice]);
+            Amostra amostra{};
+            // Cada atributo deve ser seguido por vírgula, inclusive o último.
+            for (int i = 0; i < entradas; ++i) {
+                float valor;
+                char separador;
+                if (!(campos >> valor >> separador) || separador != ',' ||
+                    !isfinite(valor) || valor < 0 || valor > 16) {
+                    break;
+                }
+                // Converte os valores de [0, 16] para [0, 1].
+                amostra.imagem.push_back(valor / 16.0f);
             }
-            // Converte os valores de [0, 16] para [0, 1].
-            amostra.imagem.push_back(valor / 16.0f);
+            // Depois dos atributos, deve restar apenas o rótulo de 0 a 9.
+            if (amostra.imagem.size() != entradas ||
+                !(campos >> amostra.rotulo) ||
+                amostra.rotulo < 0 || amostra.rotulo >= classes ||
+                !(campos >> ws).eof()) {
+                throw runtime_error(caminho + ":" + to_string(indice + 1) +
+                    " — esperados 64 atributos de 0 a 16 e um rótulo inteiro de 0 a 9");
+            }
+            dados[indice] = move(amostra);
+        } catch (...) {
+            erros[indice] = current_exception();
         }
-        // Depois dos atributos, deve restar apenas o rótulo de 0 a 9.
-        if (amostra.imagem.size() != entradas ||
-            !(campos >> amostra.rotulo) ||
-            amostra.rotulo < 0 || amostra.rotulo >= classes ||
-            !(campos >> ws).eof()) {
-            throw runtime_error(caminho + ":" + to_string(numero_linha) +
-                " — esperados 64 atributos de 0 a 16 e um rótulo inteiro de 0 a 9");
-        }
-        dados.push_back(move(amostra));
+    }
+    // Reporta a primeira falha na ordem original, após a barreira implícita.
+    for (const auto& erro : erros) {
+        if (erro) rethrow_exception(erro);
     }
     if (arquivo.bad() || dados.empty()) {
         throw runtime_error("Falha de leitura ou arquivo vazio: " + caminho);
