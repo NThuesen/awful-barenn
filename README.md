@@ -46,10 +46,13 @@ python3 tests/testar_leitura_openmp.py
 
 A opção `-fopenmp` habilita a conversão paralela; sem ela, o mesmo código pode rodar sequencialmente. Quatro threads foram a configuração mais estável entre as testadas no Franky; não é uma recomendação universal. Nos benchmarks, a afinidade das threads também foi configurada (`OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_WAIT_POLICY=PASSIVE`); em computadores diferentes, essas opções devem ser adequadas à topologia disponível. Os testes requerem Python 3 e um compilador compatível. A suíte do oráculo utiliza commits históricos, portanto execute em clone com o histórico disponível.
 
-Para reproduzir o marco CUDA no Franky, use a versão apropriada, o módulo CUDA do cluster e as instruções de [compilação e validação](docs/cuda.md):
+Para reproduzir o marco CUDA no Franky, faça o checkout no nó de acesso e prepare os cabeçalhos quando necessário, conforme as instruções de [compilação e validação](docs/cuda.md). Em seguida, solicite uma GPU e execute os comandos no nó alocado:
 
 ```bash
 git checkout v0.3-cuda-backward-paralelo
+srun --partition=merry_gpu --gres=gpu:1 --cpus-per-task=1 --mem=2048M --time=00:04:30 --pty bash
+module load gcc/14.2.0
+module load cuda/12.8.1
 scripts/compilar_cuda.sh ./barenn_cuda
 ./barenn_cuda
 ```

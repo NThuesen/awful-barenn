@@ -14,7 +14,7 @@ Solicite uma GPU conforme os limites atuais do Slurm e compile no nó alocado. E
 
 ```bash
 srun --partition=merry_gpu --gres=gpu:1 --cpus-per-task=1 --mem=2048M --time=00:04:30 --pty bash
-module swap gcc linux-rocky9-x86_64/Core/gcc/14.2.0
+module load gcc/14.2.0
 module load cuda/12.8.1
 scripts/compilar_cuda.sh ./barenn_cuda
 ./barenn_cuda
