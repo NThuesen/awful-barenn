@@ -47,6 +47,12 @@ python3 tests/testar_oraculo.py
 python3 tests/testar_leitura_openmp.py
 ```
 
+### Compilação opcional com AVX2
+
+Em processadores com suporte a AVX2, é possível acrescentar `-mavx2` ao comando CPU acima. Essa opção pode produzir um executável incompatível com CPUs sem AVX2; mantenha o comando padrão para portabilidade. Não é necessário `-ffast-math`. AVX2 explora SIMD e não adiciona paralelismo entre núcleos.
+
+Na comparação pareada da [#24](https://github.com/NThuesen/awful-barenn/issues/24), a mediana de treino passou de 0,2557 s para 0,2117 s (1,208×) e a do processo completo de 0,318 s para 0,260 s (1,223×), no i7-13700T do Franky. O oráculo comparou 83.672 valores sem divergências; são resultados específicos desse nó e dessas flags, não uma garantia para outros processadores.
+
 A opção `-fopenmp` habilita a conversão paralela; sem ela, o mesmo código pode rodar sequencialmente. Quatro threads foram a configuração mais estável entre as testadas no Franky; não é uma recomendação universal. Nos benchmarks, a afinidade das threads também foi configurada (`OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_WAIT_POLICY=PASSIVE`); em computadores diferentes, essas opções devem ser adequadas à topologia disponível. Os testes requerem Python 3 e um compilador compatível. A suíte do oráculo utiliza commits históricos, portanto execute em clone com o histórico disponível.
 
 Para reproduzir o marco CUDA no Franky, faça o checkout no nó de acesso e prepare os cabeçalhos quando necessário, conforme as instruções de [compilação e validação](docs/cuda.md). Em seguida, solicite uma GPU e execute os comandos no nó alocado:
