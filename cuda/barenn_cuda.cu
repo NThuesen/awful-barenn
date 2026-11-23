@@ -100,20 +100,16 @@ __device__ void snapshot_params(Snapshot* snap, Layer a, Layer b, Layer c, bool 
     __syncthreads();
 }
 #endif
-// Um único bloco percorre a época na ordem original, com pesos em memória compartilhada.
+// Controle experimental: um bloco percorre a época com parâmetros em memória global.
 __global__ void train_epoch(Layer d1, Layer d2, Layer d3, const float* images,
                             const int* labels, int n, float* losses, Snapshot* traces) {
-    __shared__ float w1[2048],w2[512],w3[160],b1[32],b2[16],b3[10];
+    float *w1=d1.w,*w2=d2.w,*w3=d3.w,*b1=d1.b,*b2=d2.b,*b3=d3.b;
     __shared__ float z1[32],z2[16],z3[10],a1[32],a2[16],a3[10];
     __shared__ float dlt1[32],dlt2[16],dlt3[10],gi1[64],gi2[32],gi3[16],grad[10];
     Layer l1{64,32,w1,b1,z1,a1,dlt1,gi1};
     Layer l2{32,16,w2,b2,z2,a2,dlt2,gi2};
     Layer l3{16,10,w3,b3,z3,a3,dlt3,gi3};
     int t=threadIdx.x;
-    for(int k=t;k<2048;k+=blockDim.x) w1[k]=d1.w[k];
-    for(int k=t;k<512;k+=blockDim.x) w2[k]=d2.w[k];
-    for(int k=t;k<160;k+=blockDim.x) w3[k]=d3.w[k];
-    if(t<32)b1[t]=d1.b[t]; if(t<16)b2[t]=d2.b[t]; if(t<10)b3[t]=d3.b[t];
     __syncthreads();
     for(int i=0;i<n;++i) {
         const float* input=images+static_cast<size_t>(i)*64;
@@ -149,10 +145,6 @@ __global__ void train_epoch(Layer d1, Layer d2, Layer d3, const float* images,
 #endif
         // A última barreira do backward termina a atualização antes da próxima amostra.
     }
-    for(int k=t;k<2048;k+=blockDim.x) d1.w[k]=w1[k];
-    for(int k=t;k<512;k+=blockDim.x) d2.w[k]=w2[k];
-    for(int k=t;k<160;k+=blockDim.x) d3.w[k]=w3[k];
-    if(t<32)d1.b[t]=b1[t]; if(t<16)d2.b[t]=b2[t]; if(t<10)d3.b[t]=b3[t];
 }
 
 // Os buffers persistem na memória global para avaliação e entre épocas.
