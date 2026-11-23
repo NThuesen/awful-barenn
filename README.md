@@ -77,7 +77,7 @@ Os comandos completos de Slurm, o procedimento quando faltam cabeçalhos e o uso
 | Comparação histórica | [#11](https://github.com/NThuesen/awful-barenn/issues/11) | Relatório; sem tag própria |
 | Conferência de entrega | [#12](https://github.com/NThuesen/awful-barenn/issues/12) | Checklist e auditoria final |
 
-As **sete tags** publicadas são anotadas e apontam para os commits registrados em cada marco. A fork utiliza `master` como branch padrão; o enunciado abaixo usa `main`, mas os PRs deste trabalho foram integrados à `master`.
+As **sete tags** publicadas são anotadas e apontam para os commits registrados em cada marco. A branch padrão e de entrega é `main`, que contém todos os PRs integrados e o histórico completo das tags. A antiga `master` permanece como referência histórica, sem mudanças adicionais no código.
 
 ---
 
