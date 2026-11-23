@@ -145,6 +145,18 @@ public:
         return out;
     }
 
+#ifdef BARENN_PARALLEL_EVAL
+    vector<float> Inferir(const vector<float>& input) const {
+        vector<float> out(out_features);
+        for (int i = 0; i < out_features; ++i) {
+            float sum = bias[i];
+            for (int j = 0; j < in_features; ++j) sum += input[j] * weights[i][j];
+            out[i] = final ? sum : max(0.0f, sum);
+        }
+        return out;
+    }
+#endif
+
     vector<float> Backward(const vector<float>& grad_out, float learning_rate) {
         // Delta é o gradiente da perda em relação à soma antes da ativação.
         // Na ReLU, o gradiente passa apenas quando essa soma é positiva.
@@ -291,6 +303,13 @@ void avaliar(DenseLayer& l1, DenseLayer& l2, DenseLayer& l3,
     size_t exemplos_erro = 0;
     double perda_total = 0;
 
+    const auto inicio_avaliacao = chrono::steady_clock::now();
+#ifdef BARENN_PARALLEL_EVAL
+    vector<vector<float>> resultados(teste.size());
+    #pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < teste.size(); ++i)
+        resultados[i] = l3.Inferir(l2.Inferir(l1.Inferir(teste[i].imagem)));
+#endif
     // Só fazemos forward aqui. Os pesos ficam fixos.
     for (size_t i = 0; i < teste.size(); ++i) {
         const auto& amostra = teste[i];
@@ -299,7 +318,11 @@ void avaliar(DenseLayer& l1, DenseLayer& l2, DenseLayer& l3,
         Oracle::epoca = 0;
         Oracle::amostra = i;
 #endif
+#ifdef BARENN_PARALLEL_EVAL
+        auto& escores = resultados[i];
+#else
         auto escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem)));
+#endif
         // O índice do maior escore indica a classe prevista.
         int previsto = static_cast<int>(
             max_element(escores.begin(), escores.end()) - escores.begin());
@@ -336,6 +359,8 @@ void avaliar(DenseLayer& l1, DenseLayer& l2, DenseLayer& l3,
         }
     }
 
+    const chrono::duration<double> tempo_avaliacao = chrono::steady_clock::now() - inicio_avaliacao;
+    cerr << "Tempo avaliacao " << tempo_avaliacao.count() << " s\n";
 #ifdef BARENN_ORACLE
     if (Oracle::ativa()) {
         for (int i = 0; i < classes; ++i)
