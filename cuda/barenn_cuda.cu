@@ -4,12 +4,6 @@
 #include <cstdio>
 #include <limits>
 
-#ifndef BARENN_TRAIN_THREADS
-#define BARENN_TRAIN_THREADS 64
-#endif
-static_assert(BARENN_TRAIN_THREADS == 64 || BARENN_TRAIN_THREADS == 128 ||
-              BARENN_TRAIN_THREADS == 256, "Use 64, 128 ou 256 threads no treino");
-
 static void check(cudaError_t status, const char* operacao) {
     if (status != cudaSuccess)
         throw std::runtime_error(std::string(operacao) + ": " + cudaGetErrorString(status));
@@ -283,7 +277,7 @@ int main(int argc, char** argv) {
 #else
           Snapshot* current_traces=nullptr;
 #endif
-          train_epoch<<<1,BARENN_TRAIN_THREADS>>>(l1,l2,l3,d_images.get(),d_labels.get(),n,losses.get(),current_traces);
+          train_epoch<<<1,256>>>(l1,l2,l3,d_images.get(),d_labels.get(),n,losses.get(),current_traces);
           CUDA(cudaGetLastError());
           // Uma cópia por época; a soma em double segue a ordem da CPU.
           CUDA(timed_copy(host_losses.data(),losses.get(),n*sizeof(float),cudaMemcpyDeviceToHost));
