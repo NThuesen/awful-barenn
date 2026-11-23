@@ -78,8 +78,8 @@ class DenseLayer {
     int in_features;
     int out_features;
     bool final;
-    // weights[i][j] liga a entrada j ao neurônio de saída i.
-    vector<vector<float>> weights;
+    // Pesos em ordem de linhas: neurônio de saída, depois entrada.
+    vector<float> weights;
     vector<float> bias;
     // Dados do último forward usados para calcular os gradientes.
     vector<float> last_input;
@@ -91,32 +91,33 @@ public:
     void oracle_nome(const string& nome) { nome_oraculo = nome; }
     void oracle_parametros(const string& contexto) const {
         if (!Oracle::ativa()) return;
-        for (size_t i = 0; i < weights.size(); ++i)
-            Oracle::vetor(contexto + "/" + nome_oraculo + "/peso/" + to_string(i), weights[i]);
+        for (int i = 0; i < out_features; ++i)
+            for (int j = 0; j < in_features; ++j)
+                Oracle::valor(contexto + "/" + nome_oraculo + "/peso/" + to_string(i) + "/" + to_string(j),
+                              weights[i * in_features + j], numeric_limits<float>::max_digits10);
         Oracle::vetor(contexto + "/" + nome_oraculo + "/vies", bias);
     }
     // Usado apenas pelos testes de camadas pequenas.
     void oracle_definir(const vector<vector<float>>& w, const vector<float>& b) {
-        if (w.size() != weights.size() || b.size() != bias.size())
+        if (w.size() != static_cast<size_t>(out_features) || b.size() != bias.size())
             throw runtime_error("Dimensões inválidas");
         for (const auto& linha : w)
             if (linha.size() != static_cast<size_t>(in_features))
                 throw runtime_error("Dimensões inválidas");
-        weights = w;
+        for (int i = 0; i < out_features; ++i)
+            copy(w[i].begin(), w[i].end(), weights.begin() + i * in_features);
         bias = b;
     }
 #endif
 public:
     DenseLayer(int input_size, int output_size, bool is_final = false)
         : in_features(input_size), out_features(output_size), final(is_final),
-          weights(output_size, vector<float>(input_size)), bias(output_size, 0) {
+          weights(static_cast<size_t>(output_size) * input_size), bias(output_size, 0) {
         // A semente fixa torna a inicialização de cada camada reproduzível.
         mt19937 gen(1337);
         uniform_real_distribution<float> distribution(-0.05f, 0.05f);
-        for (auto& row : weights) {
-            for (float& weight : row) {
-                weight = distribution(gen);
-            }
+        for (float& weight : weights) {
+            weight = distribution(gen);
         }
     }
 
@@ -128,7 +129,7 @@ public:
         for (int i = 0; i < out_features; ++i) {
             float sum = bias[i];
             for (int j = 0; j < in_features; ++j) {
-                sum += input[j] * weights[i][j];
+                sum += input[j] * weights[i * in_features + j];
             }
             last_z[i] = sum;
             // As camadas ocultas usam ReLU. A última devolve escores lineares.
@@ -158,7 +159,7 @@ public:
         vector<float> grad_in(in_features);
         for (int j = 0; j < out_features; ++j) {
             for (int i = 0; i < in_features; ++i) {
-                grad_in[i] += delta[j] * weights[j][i];
+                grad_in[i] += delta[j] * weights[j * in_features + i];
             }
         }
 
@@ -181,7 +182,7 @@ public:
         // O gradiente do viés é o próprio delta.
         for (int i = 0; i < out_features; ++i) {
             for (int j = 0; j < in_features; ++j) {
-                weights[i][j] -= learning_rate * (delta[i] * last_input[j]);
+                weights[i * in_features + j] -= learning_rate * (delta[i] * last_input[j]);
             }
             bias[i] -= learning_rate * delta[i];
         }
