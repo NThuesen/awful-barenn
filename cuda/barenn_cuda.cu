@@ -277,7 +277,7 @@ int main(int argc, char** argv) {
 #else
           Snapshot* current_traces=nullptr;
 #endif
-          train_epoch<<<1,64>>>(l1,l2,l3,d_images.get(),d_labels.get(),n,losses.get(),current_traces);
+          train_epoch<<<1,256>>>(l1,l2,l3,d_images.get(),d_labels.get(),n,losses.get(),current_traces);
           CUDA(cudaGetLastError());
           // Uma cópia por época; a soma em double segue a ordem da CPU.
           CUDA(timed_copy(host_losses.data(),losses.get(),n*sizeof(float),cudaMemcpyDeviceToHost));
