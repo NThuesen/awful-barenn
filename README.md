@@ -21,6 +21,9 @@ Esses tempos são do **treinamento**, medidos sem profiler. Eles vêm de rodadas
 | Evitar cópias no `Backward` ([#4](https://github.com/NThuesen/awful-barenn/issues/4)) | 0,2703 → 0,2561 s; segunda rodada 0,2698 → 0,2562 s de **treino** | **1,055× / 1,053×** |
 | Conversão OpenMP de datasets, quatro threads ([#18](https://github.com/NThuesen/awful-barenn/issues/18)) | 0,313063 → 0,298183 s; segunda rodada 0,310348 → 0,294662 s de **processo completo** | **1,050× / 1,053×** |
 | Paralelismo de pesos no backward CUDA ([#10](https://github.com/NThuesen/awful-barenn/issues/10)) | 1,676300 → 0,926385 s de **treino** | **1,81×** |
+| Parâmetros CUDA global × shared ([#22](https://github.com/NThuesen/awful-barenn/issues/22)) | 1,235175 → 0,933711 s de **treino**, controle global experimental | **1,323×** |
+
+O controle global da #22 não foi integrado: a comparação isola a escolha de localização junto com as cópias de parâmetros por época, com recursos compartilhados e ordem fixa dos pares. O compilador GCC 14.2.0 também confirmou vetorização de 16 bytes no laço interno da CPU otimizada ([#5](https://github.com/NThuesen/awful-barenn/issues/5)), sem quantificar sua contribuição ao ganho.
 
 Cada comparação acima tem cinco medições independentes por configuração, com detalhes de dispersão, aquecimento, hardware e flags na respectiva Issue. Os ganhos não devem ser multiplicados como se tivessem sido obtidos num único benchmark. A tentativa de OpenMP dentro do `Forward` ([#6](https://github.com/NThuesen/awful-barenn/issues/6)) preservou os resultados, mas piorou o desempenho; ficou fora da versão final. A ideia de reduzir cópias CUDA ([#9](https://github.com/NThuesen/awful-barenn/issues/9)) também não foi implementada, porque o profiling disponível não sustentou sua prioridade.
 
@@ -73,6 +76,7 @@ Os comandos completos de Slurm, o procedimento quando faltam cabeçalhos e o uso
 | Redução de cópias CPU | [#4](https://github.com/NThuesen/awful-barenn/issues/4) | [PR #17](https://github.com/NThuesen/awful-barenn/pull/17) · [v0.4-cpu-backward-const-ref](https://github.com/NThuesen/awful-barenn/tree/v0.4-cpu-backward-const-ref) |
 | OpenMP dentro do Forward | [#6](https://github.com/NThuesen/awful-barenn/issues/6) | Experimento descartado; sem PR/tag |
 | Carga OpenMP dos datasets | [#18](https://github.com/NThuesen/awful-barenn/issues/18) | [PR #19](https://github.com/NThuesen/awful-barenn/pull/19) · [v0.5-cpu-openmp-datasets](https://github.com/NThuesen/awful-barenn/tree/v0.5-cpu-openmp-datasets) |
+| Controle CUDA global × shared | [#22](https://github.com/NThuesen/awful-barenn/issues/22) | Controle experimental em branch; sem merge/tag |
 | Transferências CUDA | [#9](https://github.com/NThuesen/awful-barenn/issues/9) | Hipótese não implementada; sem PR/tag |
 | Comparação histórica | [#11](https://github.com/NThuesen/awful-barenn/issues/11) | Relatório; sem tag própria |
 | Conferência de entrega | [#12](https://github.com/NThuesen/awful-barenn/issues/12) | Checklist e auditoria final |
