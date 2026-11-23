@@ -1,5 +1,13 @@
 # Treinamento CUDA
 
+## Estado atual e escopo das medições (23/11/2026)
+
+A versão CUDA mais recente e aprovada é a **tag anotada [`v0.6-cuda-bloco-256`](https://github.com/NThuesen/awful-barenn/tree/v0.6-cuda-bloco-256)**, formalizada na [Issue #30](https://github.com/NThuesen/awful-barenn/issues/30) e integrada pelo [PR #31](https://github.com/NThuesen/awful-barenn/pull/31). Ela mantém **um kernel por época e um único bloco por lançamento**, mas agora utiliza **256 threads no treino** (em vez das 64 threads do marco anterior `v0.3`); os lançamentos `forward` da avaliação permanecem com 64 threads. O SGD e a ordem numérica são preservados.
+
+Na RTX A1000 do Franky, duas rodadas pareadas de seis trios cada, **sem profiler**, mediram a mediana de treino de **0,925028 → 0,579681 s** e **0,924796 → 0,579527 s** (ambas **1,596×**), comparando 64 contra 256 threads no mesmo hardware e rodada. O processo completo melhorou **1,124×** e **1,121×**. O oráculo comprovou **83.672 valores idênticos, tolerância zero**, e **1.717/1.797 acertos**. O novo bloco usa 51 registradores/thread e 12.000 B de shared estática na imagem carregada da RTX A1000; **ocupação real e throughput não foram medidos**, devido a `ERR_NVGPUCTRPERM`. Detalhes e limitações constam do [relatório da Issue #30](https://github.com/NThuesen/awful-barenn/issues/30#issuecomment-7115126272).
+
+**Os tempos de ~1,67–1,84 s e as comparações CPU/GPU apresentados nas seções históricas abaixo são de versões/rodadas anteriores**, não da tag `v0.6`. Eles foram mantidos para reprodutibilidade e discussão da evolução. Não calcular speedup combinando medições de rodadas distintas. Para reproduzir a versão final, execute `git checkout v0.6-cuda-bloco-256` antes dos comandos de compilação e execução indicados abaixo, e utilize a [comparação com oráculo](#validação-numérica).
+
 O objetivo desta etapa foi levar o treinamento do Barenn para a GPU sem mudar a maneira como a rede aprende. Continuamos com 51 épocas, as amostras na ordem do arquivo e uma atualização dos pesos depois de cada amostra. Não usamos embaralhamento nem mini-batches, porque isso mudaria o resultado que estamos tentando preservar.
 
 A versão integrada executa **um kernel por época**. Dentro dele, um bloco CUDA percorre as amostras e divide os cálculos dos neurônios entre as threads. Os pesos ficam em memória compartilhada, e as barreiras evitam que uma etapa leia valores que ainda estão sendo alterados. No backward, o gradiente de entrada usa os pesos anteriores à atualização. Ao terminar a época, a GPU envia as perdas por amostra para a CPU, que faz a soma em `double` na mesma ordem da versão original.
