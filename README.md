@@ -33,7 +33,9 @@ Usamos os arquivos originais `optdigits.tra` (3.823 amostras) e `optdigits.tes` 
 
 Para preservar essa igualdade, as medições de referência CPU usaram `-ffp-contract=off` e a CUDA `--fmad=false`. Não estendemos a afirmação de igualdade exata a outras flags ou à CUDA com FMA ativo. As medidas CPU ocorreram no `compute10` (Intel i7-13700T), e as CUDA no `compute20` (Intel i9-14900 + RTX A1000): a diferença entre nós impede atribuir toda a comparação CPU/GPU apenas ao tipo de processador.
 
-O [profiling de CPU](https://github.com/NThuesen/awful-barenn/issues/2) identificou o custo do gradiente de entrada no backward. No [profiling CUDA](https://github.com/NThuesen/awful-barenn/issues/8), o kernel de treino concentrou 99,37% do tempo acumulado de kernels; o Nsight Compute não forneceu contadores por restrição de permissão (`ERR_NVGPUCTRPERM`). Portanto, não afirmamos ter medido ocupação real dos SMs ou o custo isolado das barreiras.
+O [profiling de CPU](https://github.com/NThuesen/awful-barenn/issues/2) identificou o custo do gradiente de entrada no backward. No [profiling da CUDA inicial](https://github.com/NThuesen/awful-barenn/issues/8), o kernel de treino concentrou 99,37% do tempo acumulado dos kernels. Um [novo trace Nsight Systems da CUDA otimizada](https://github.com/NThuesen/awful-barenn/issues/11#issuecomment-7113595114), em outra execução **instrumentada**, registrou 51 lançamentos de `train_epoch` (951,128 ms acumulados) e 2,783 ms de eventos H2D+D2H na GPU. Esses valores de profiling **não** entram nos speedups, que vêm das medições pareadas sem profiler.
+
+Na versão otimizada carregada na RTX A1000, o kernel utilizou **51 registradores/thread e 12.000 bytes de shared estática**. A API CUDA estimou um limite de **7 blocos por SM (29,17% de ocupação teórica com blocos suficientes)**. Porém a grid usa **somente um bloco de 64 threads**: no máximo 2 dos 48 warps de um SM (4,17%), sem distribuir esse lançamento pelos outros 17 SMs. O Nsight Compute retornou `ERR_NVGPUCTRPERM` nas GPUs acessíveis testadas; **ocupação real, throughput e tráfego interno da memória não foram medidos**, assim como o custo isolado das barreiras. Essas porcentagens são limites calculados, não valores de ocupação observados.
 
 ## Como executar e verificar
 
@@ -82,12 +84,14 @@ Os comandos completos de Slurm, o procedimento quando faltam cabeçalhos e o uso
 | Redução de cópias CPU | [#4](https://github.com/NThuesen/awful-barenn/issues/4) | [PR #17](https://github.com/NThuesen/awful-barenn/pull/17) · [v0.4-cpu-backward-const-ref](https://github.com/NThuesen/awful-barenn/tree/v0.4-cpu-backward-const-ref) |
 | OpenMP dentro do Forward | [#6](https://github.com/NThuesen/awful-barenn/issues/6) | Experimento descartado; sem PR/tag |
 | Carga OpenMP dos datasets | [#18](https://github.com/NThuesen/awful-barenn/issues/18) | [PR #19](https://github.com/NThuesen/awful-barenn/pull/19) · [v0.5-cpu-openmp-datasets](https://github.com/NThuesen/awful-barenn/tree/v0.5-cpu-openmp-datasets) |
-| Controle CUDA global × shared | [#22](https://github.com/NThuesen/awful-barenn/issues/22) | Controle experimental em branch; sem merge/tag |
+| Controle CUDA global × shared | [#22](https://github.com/NThuesen/awful-barenn/issues/22) | [PR #23 — documentação](https://github.com/NThuesen/awful-barenn/pull/23) · [controle `60e835c`](https://github.com/NThuesen/awful-barenn/commit/60e835c), sem tag própria |
+| CPU com AVX2 opcional | [#24](https://github.com/NThuesen/awful-barenn/issues/24) | [PR #25 — documentação](https://github.com/NThuesen/awful-barenn/pull/25) · base [v0.5](https://github.com/NThuesen/awful-barenn/tree/v0.5-cpu-openmp-datasets) |
+| Avaliação multicore experimental | [#26](https://github.com/NThuesen/awful-barenn/issues/26) | [Controle `38efba1`](https://github.com/NThuesen/awful-barenn/commit/38efba1), sem ganho consistente no processo nem nova tag |
 | Transferências CUDA | [#9](https://github.com/NThuesen/awful-barenn/issues/9) | Hipótese não implementada; sem PR/tag |
 | Comparação histórica | [#11](https://github.com/NThuesen/awful-barenn/issues/11) | Relatório; sem tag própria |
 | Conferência de entrega | [#12](https://github.com/NThuesen/awful-barenn/issues/12) | Checklist e auditoria final |
 
-As **sete tags** publicadas são anotadas e apontam para os commits registrados em cada marco. A branch padrão e de entrega é `main`, que contém todos os PRs integrados e o histórico completo das tags. A antiga `master` permanece como referência histórica, sem mudanças adicionais no código.
+As **sete tags** publicadas são anotadas e apontam para os commits registrados em cada marco. A branch padrão e de entrega é `main`, que contém todos os PRs de implementação **aprovados** e o histórico completo das tags. A antiga `master` permanece como referência histórica, sem mudanças adicionais no código. As branches `experiment/issue-22-cuda-global` e `experiment/issue-26-avaliacao` são controles de pesquisa **não integrados ao código final**; seus commits e resultados estão indicados no índice e nas Issues encerradas. Não receberam tags de melhoria, pois não constituem novos marcos aprovados.
 
 ---
 
