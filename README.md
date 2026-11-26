@@ -28,7 +28,13 @@ Esses tempos são do **treinamento**, medidos sem profiler. Os pares CUDA da #10
 
 O controle global da #22 não foi integrado: a comparação isola a escolha de localização junto com as cópias de parâmetros por época, com recursos compartilhados e ordem fixa dos pares. O compilador GCC 14.2.0 também confirmou vetorização de 16 bytes no laço interno da CPU otimizada ([#5](https://github.com/NThuesen/awful-barenn/issues/5)), sem quantificar sua contribuição ao ganho.
 
+A reorganização dos laços no `Backward` segue o conceito de ordenação de loops para melhorar a localidade de acesso apresentado na Aula 3, página 10. A passagem do gradiente por referência constante evita cópias e segue o material C++ sobre referências, páginas 8 e 9.
+
+A Aula 6, página 9, apresenta SIMD, `omp simd` e `omp parallel for simd`. Nesta implementação, a vetorização observada foi feita automaticamente pelo compilador; o código não usa diretivas SIMD explícitas.
+
 As comparações #5, #4, #18, #10 e #22 usaram cinco medições por configuração; a **#30 usou seis trios por rodada e duas rodadas independentes**, intercalando todas as ordens de 64/128/256 threads. Cada Issue registra dispersão, aquecimento, hardware e flags. Os ganhos **não devem ser multiplicados** como se tivessem sido obtidos em um único benchmark. A tentativa de OpenMP dentro do `Forward` ([#6](https://github.com/NThuesen/awful-barenn/issues/6)) preservou os resultados, mas piorou o desempenho; ficou fora da versão final. A ideia de reduzir cópias CUDA ([#9](https://github.com/NThuesen/awful-barenn/issues/9)) também não foi implementada, porque o profiling disponível não sustentou sua prioridade. A hipótese de pesos contíguos da CPU ([#29](https://github.com/NThuesen/awful-barenn/issues/29)) também regrediu, mesmo com oráculo idêntico, e não foi adotada.
+
+A conversão das linhas dos datasets foi mantida com OpenMP porque suas iterações são independentes e o experimento apresentou ganho no processo completo. No treinamento, cada amostra depende dos pesos atualizados pela anterior. A tentativa de paralelizar o `Forward` preservou os resultados comparados, mas ficou mais lenta, como registrado na Issue #6.
 
 ## Corretude e limites da comparação
 
@@ -96,7 +102,7 @@ Os comandos completos de Slurm, o procedimento quando faltam cabeçalhos e o uso
 | Comparação histórica | [#11](https://github.com/NThuesen/awful-barenn/issues/11) | Relatório; sem tag própria |
 | Conferência de entrega | [#12](https://github.com/NThuesen/awful-barenn/issues/12) | Checklist e auditoria final |
 
-As **sete tags anotadas históricas até v0.5** permanecem preservadas. O novo marco **v0.6-cuda-bloco-256** corresponde ao commit de integração [PR #31 (`296140af`)](https://github.com/NThuesen/awful-barenn/commit/296140af58a2a55b40c50bdbd423fe8efe17c920), com ganho medido na [#30](https://github.com/NThuesen/awful-barenn/issues/30). A branch padrão e de entrega é `main`, que contém os PRs de implementação aprovados e a ancestralidade dos controles experimentais da [documentação de tentativas descartadas](docs/experimentos-controle.md); os códigos regressivos não substituem o código final. A antiga `master` permanece como referência histórica. Tags por desempenho somente para mudanças positivas integradas e reproduzíveis.
+As **sete tags anotadas históricas até v0.5** permanecem preservadas. O novo marco **v0.6-cuda-bloco-256** corresponde ao commit de integração [PR #31 (`296140af`)](https://github.com/NThuesen/awful-barenn/commit/296140af58a2a55b40c50bdbd423fe8efe17c920), com ganho medido na [#30](https://github.com/NThuesen/awful-barenn/issues/30). A branch padrão e de entrega é `main`, que contém os PRs de implementação aprovados e a ancestralidade dos controles experimentais da [documentação de tentativas descartadas](docs/experimentos-controle.md); os códigos regressivos não substituem o código final. A antiga `master` permanece como referência histórica. Conforme a orientação do enunciado de não criar tags para alterações inconclusivas ou regressivas, os experimentos descartados foram documentados nas respectivas Issues e, quando disponível, seus commits foram preservados no histórico. As tags identificam os marcos integrados e validados.
 
 ---
 
